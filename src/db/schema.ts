@@ -15,6 +15,8 @@ export interface Settings {
     filingDate: ISODate
   }
   theme: 'system' | 'light' | 'dark'
+  /** model for LLM Smart-Paste; absent = default */
+  aiModel?: string
 }
 
 export interface IncomeEvent {

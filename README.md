@@ -18,6 +18,8 @@ Built as a mobile-first PWA. **All data stays on your device** (IndexedDB) — n
 - **Impulse Interceptor** — amount → annualized cost → impact on safe-to-spend → *Wait 24h / Buy it / Skip it*, with a running "money kept" total
 - **Chapter 7 Means-Test Screener** — Form 122A-1 logic: 6 full calendar months of gross income, annualized, vs. the state median (Colorado 1-person preloaded; always verify at [justice.gov/ust/means-testing](https://www.justice.gov/ust/means-testing)). **Screening estimate only — not legal advice.**
 - **Money** — cash on hand, base paycheck, income logging, bills with autopay flags, a deterministic Paste Inbox (parsed transactions land in a confirm queue — nothing commits silently), settings, and encrypted backup
+- **AI Smart-Paste** (optional) — Claude parses messy bank text into proposed transactions via structured outputs, deterministically validated before they reach the same confirm queue. Bring your own Anthropic API key: memory-only by default, or stored encrypted (AES-256-GCM + passphrase) on-device
+- **Prior Chapter vault** — a soft reset for post-discharge fresh starts: transactions, income, impulses, and means-test months are archived (never deleted) into a viewable, exportable vault; bills, paycheck, cash, and settings carry forward
 
 ## Development
 
@@ -30,6 +32,6 @@ npm run build    # production build to dist/
 
 Deploys to GitHub Pages via `.github/workflows/deploy.yml`. One-time setup: repository **Settings → Pages → Source: GitHub Actions**.
 
-## v2 backlog
+## Backlog
 
-Trading guardrails (speculative-capital firewall, loss cooldowns), LLM-assisted Smart-Paste, multi-account, device sync, "Prior Chapter" soft-reset vault, credit-utilization rebuild dashboard.
+Trading guardrails (speculative-capital firewall, loss cooldowns), multi-account, device sync, credit-utilization rebuild dashboard.
