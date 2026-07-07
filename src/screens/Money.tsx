@@ -8,7 +8,11 @@ import {
 } from '../components/ui'
 import { fmtShort, todayISO } from '../logic/dates'
 import { fmtMoney, round2, type Bill, type PayFrequency } from '../logic/money'
-import { parseBankText } from '../logic/parser'
+import { parseBankText, type ParsedTxn } from '../logic/parser'
+import { DEFAULT_AI_MODEL, parseBankTextWithAI, type AiModelId } from '../logic/aiParser'
+import { useApiKey } from '../state/apiKey'
+import SmartPasteAI from './money/SmartPasteAI'
+import PriorChapter from './money/PriorChapter'
 
 async function adjustCash(delta: number) {
   const row = await db.cash.get('main')
@@ -354,12 +358,35 @@ function PendingRow({ t }: { t: Txn }) {
 
 function PasteSection() {
   const pending = useLiveQuery(() => db.transactions.where('status').equals('pending').toArray())
+  const settings = useLiveQuery(() => db.settings.get('main'))
+  const apiKey = useApiKey()
   const [text, setText] = useState('')
   const [note, setNote] = useState<string | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+
+  async function queueProposals(parsed: ParsedTxn[], source: string) {
+    if (parsed.length === 0) {
+      setNote(`No transactions found by ${source} — try pasting the transaction rows themselves.`)
+      return
+    }
+    await db.transactions.bulkAdd(
+      parsed.map((p) => ({
+        date: p.date ?? todayISO(),
+        amount: p.amount,
+        description: p.description,
+        direction: p.direction,
+        origin: 'paste' as const,
+        status: 'pending' as const,
+        snippet: p.snippet,
+      })),
+    )
+    setText('')
+    setNote(`${parsed.length} proposed by ${source} — review below.`)
+  }
 
   return (
     <Card>
-      <SectionTitle hint="Paste transaction lines from your banking app. Deterministic parsing on-device — nothing counts until you confirm it, and nothing is sent anywhere.">
+      <SectionTitle hint="Paste transaction lines from your banking app. Basic parsing stays fully on-device; AI parsing sends only the pasted text to Anthropic with your key. Either way, nothing counts until you confirm it.">
         Paste inbox
       </SectionTitle>
       <textarea
@@ -369,32 +396,33 @@ function PasteSection() {
         placeholder={'07/01 STARBUCKS 6.45\n07/02 PAYROLL DEPOSIT 1,800.00'}
         className="w-full rounded-xl border border-hairline bg-surface p-3 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
       />
-      <div className="mt-2 flex items-center gap-2">
-        <Button
-          disabled={!text.trim()}
-          onClick={async () => {
-            const parsed = parseBankText(text)
-            if (parsed.length === 0) {
-              setNote('No amounts found in that text — try pasting the transaction rows themselves.')
-              return
-            }
-            await db.transactions.bulkAdd(
-              parsed.map((p) => ({
-                date: p.date ?? todayISO(),
-                amount: p.amount,
-                description: p.description,
-                direction: p.direction,
-                origin: 'paste' as const,
-                status: 'pending' as const,
-                snippet: p.snippet,
-              })),
-            )
-            setText('')
-            setNote(`${parsed.length} proposed — review below.`)
-          }}
-        >
+      <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <Button disabled={!text.trim() || aiBusy} onClick={() => queueProposals(parseBankText(text), 'basic parsing')}>
           Parse
         </Button>
+        {apiKey && (
+          <Button
+            variant="quiet"
+            disabled={!text.trim() || aiBusy}
+            onClick={async () => {
+              setAiBusy(true)
+              setNote('Asking Claude…')
+              try {
+                const parsed = await parseBankTextWithAI(text, {
+                  apiKey,
+                  model: (settings?.aiModel ?? DEFAULT_AI_MODEL) as AiModelId,
+                })
+                await queueProposals(parsed, 'AI')
+              } catch (err) {
+                setNote(err instanceof Error ? err.message : 'AI parsing failed — basic parsing still works.')
+              } finally {
+                setAiBusy(false)
+              }
+            }}
+          >
+            {aiBusy ? 'Parsing…' : 'Parse with AI'}
+          </Button>
+        )}
         {note && <span className="text-xs text-ink-2">{note}</span>}
       </div>
       {(pending?.length ?? 0) > 0 && (
@@ -544,6 +572,8 @@ export default function Money() {
       <IncomeSection />
       <BillsSection />
       <PasteSection />
+      <SmartPasteAI />
+      <PriorChapter />
       <SettingsSection />
     </>
   )
