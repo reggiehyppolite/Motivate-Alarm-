@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+
+/* Design tokens. Calm slate/teal; status colors are reserved and always
+   paired with an icon + label — color never carries meaning alone. */
+:root {
+  --surface: #fcfcfb;
+  --page: #f4f4f1;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --hairline: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #1baf7a; /* marks only, never text */
+  --accent-ink: #0a6b4f; /* accent as text, contrast-safe */
+  --accent-wash: rgba(27, 175, 122, 0.12);
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --warning: #fab219;
+  --warning-ink: #7a5200;
+  --serious: #ec835a;
+  --serious-ink: #9c3c14;
+  --critical: #d03b3b;
+  --critical-ink: #a32222;
+  --meter-track: rgba(27, 175, 122, 0.18);
+}
+
+:root[data-theme='dark'] {
+  --surface: #1a1a19;
+  --page: #0d0d0d;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --hairline: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #199e70;
+  --accent-ink: #3fce9c;
+  --accent-wash: rgba(25, 158, 112, 0.18);
+  --good: #0ca30c;
+  --good-ink: #35c435;
+  --warning: #fab219;
+  --warning-ink: #fab219;
+  --serious: #ec835a;
+  --serious-ink: #f0997a;
+  --critical: #d03b3b;
+  --critical-ink: #e66767;
+  --meter-track: rgba(25, 158, 112, 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface: #1a1a19;
+    --page: #0d0d0d;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hairline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --accent: #199e70;
+    --accent-ink: #3fce9c;
+    --accent-wash: rgba(25, 158, 112, 0.18);
+    --good: #0ca30c;
+    --good-ink: #35c435;
+    --warning: #fab219;
+    --warning-ink: #fab219;
+    --serious: #ec835a;
+    --serious-ink: #f0997a;
+    --critical: #d03b3b;
+    --critical-ink: #e66767;
+    --meter-track: rgba(25, 158, 112, 0.22);
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-page: var(--page);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-hairline: var(--hairline);
+  --color-edge: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-good: var(--good);
+  --color-good-ink: var(--good-ink);
+  --color-warning: var(--warning);
+  --color-warning-ink: var(--warning-ink);
+  --color-serious: var(--serious);
+  --color-serious-ink: var(--serious-ink);
+  --color-critical: var(--critical);
+  --color-critical-ink: var(--critical-ink);
+  --color-meter-track: var(--meter-track);
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* iOS momentum + no horizontal body scroll */
+body {
+  overscroll-behavior-y: contain;
+  overflow-x: hidden;
+}
+
+input[type='date'] {
+  min-height: 2.5rem;
+}
