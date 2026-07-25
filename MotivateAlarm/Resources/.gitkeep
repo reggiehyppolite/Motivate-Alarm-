@@ -1,4 +1,0 @@
-# Place your bundled alarm tone here as `alarm-tone.caf` (≤30 seconds, looping).
-# Apple recommends Core Audio Format (.caf) for alarm sounds.
-# Convert any short audio file with:
-#   afconvert -f caff -d ima4 input.wav alarm-tone.caf

@@ -1,0 +1,210 @@
+name: Build iOS app
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Also upload to TestFlight (requires signing secrets)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned .app / .ipa
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          # macos-15 runner ships with multiple Xcodes; prefer the newest that supports iOS 26 SDK.
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version || true
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Write Secrets.xcconfig
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+        run: |
+          # Falls back to a placeholder so the workflow still builds if the
+          # secret hasn't been added yet — the app just won't be able to auth
+          # with Spotify until you add it.
+          echo "SPOTIFY_CLIENT_ID = ${SPOTIFY_CLIENT_ID:-placeholder_client_id}" > Secrets.xcconfig
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned) for a real device
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MotivateAlarm.xcodeproj \
+            -scheme MotivateAlarm \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build \
+            | xcbeautify --renderer github-actions || true
+
+      - name: Package unsigned .ipa
+        run: |
+          set -e
+          DERIVED=$(xcodebuild -project MotivateAlarm.xcodeproj -scheme MotivateAlarm -showBuildSettings -configuration Release -sdk iphoneos | awk -F' = ' '/ CONFIGURATION_BUILD_DIR / {print $2; exit}')
+          echo "Build dir: $DERIVED"
+          if [ ! -d "$DERIVED/MotivateAlarm.app" ]; then
+            echo "❌ No .app was produced — check the build log above."
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$DERIVED/MotivateAlarm.app" Payload/
+          zip -qr MotivateAlarm-unsigned.ipa Payload
+          rm -rf Payload
+          ls -lh MotivateAlarm-unsigned.ipa
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MotivateAlarm-unsigned-${{ github.sha }}
+          path: MotivateAlarm-unsigned.ipa
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Signed build → TestFlight
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: testflight
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard on required secrets
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          CERT: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+          CERT_PW: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+        run: |
+          missing=()
+          for var in KEY_ID ISSUER_ID API_KEY CERT CERT_PW PROFILE TEAM_ID SPOTIFY_CLIENT_ID; do
+            if [ -z "${!var}" ]; then missing+=("$var"); fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing required repo secrets: ${missing[*]}"
+            echo "Add them under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)/Contents/Developer"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Write Secrets.xcconfig
+        run: echo "SPOTIFY_CLIENT_ID = ${{ secrets.SPOTIFY_CLIENT_ID }}" > Secrets.xcconfig
+
+      - name: Import signing certificate
+        env:
+          CERT: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+          CERT_PW: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN=build.keychain
+          KEYCHAIN_PW=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PW" $KEYCHAIN
+          security default-keychain -s $KEYCHAIN
+          security unlock-keychain -p "$KEYCHAIN_PW" $KEYCHAIN
+          security set-keychain-settings -lut 3600 $KEYCHAIN
+          echo "$CERT" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -P "$CERT_PW" -A -t cert -f pkcs12 -k $KEYCHAIN
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PW" $KEYCHAIN
+          rm /tmp/cert.p12
+
+      - name: Install provisioning profile
+        env:
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/motivatealarm.mobileprovision
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Archive
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MotivateAlarm.xcodeproj \
+            -scheme MotivateAlarm \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/MotivateAlarm.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            archive \
+            | xcbeautify --renderer github-actions
+
+      - name: Export IPA
+        run: |
+          cat > build/ExportOptions.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/MotivateAlarm.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export
+
+      - name: Upload to TestFlight
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$API_KEY" > ~/private_keys/AuthKey_${KEY_ID}.p8
+          xcrun altool --upload-app \
+            --type ios \
+            --file build/export/MotivateAlarm.ipa \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
+
+      - name: Upload signed IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MotivateAlarm-signed-${{ github.sha }}
+          path: build/export/MotivateAlarm.ipa
+          retention-days: 30
