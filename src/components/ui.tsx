@@ -217,6 +217,16 @@ export const IconScale = ({ size = 24 }: { size?: number }) =>
     </>,
     size,
   )
+export const IconChat = ({ size = 24 }: { size?: number }) =>
+  svg(
+    <>
+      <path d="M20.5 12c0 4.1-3.8 7.5-8.5 7.5-1 0-2-.15-2.9-.43L4 20.5l1.5-3.9C4.2 15.3 3.5 13.7 3.5 12 3.5 7.9 7.3 4.5 12 4.5s8.5 3.4 8.5 7.5z" />
+      <circle cx="8.5" cy="12" r="0.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+      <circle cx="15.5" cy="12" r="0.5" fill="currentColor" />
+    </>,
+    size,
+  )
 export const IconWallet = ({ size = 24 }: { size?: number }) =>
   svg(
     <>

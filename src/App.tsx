@@ -2,21 +2,26 @@ import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
 import type { TabId } from './logic/nextMove'
-import { IconHome, IconPause, IconScale, IconWallet } from './components/ui'
+import { IconChat, IconHome, IconPause, IconScale, IconWallet } from './components/ui'
 import Home from './screens/Home'
 import Impulse from './screens/Impulse'
 import MeansTest from './screens/MeansTest'
 import Money from './screens/Money'
+import Coach from './screens/Coach'
 
-const TABS: Array<{ id: TabId; label: string; icon: (p: { size?: number }) => React.ReactNode }> = [
+/** Coach is its own tab, not a next-move destination — TabId stays the money router. */
+type AppTab = TabId | 'coach'
+
+const TABS: Array<{ id: AppTab; label: string; icon: (p: { size?: number }) => React.ReactNode }> = [
   { id: 'home', label: 'Home', icon: IconHome },
   { id: 'impulse', label: 'Impulse', icon: IconPause },
   { id: 'means', label: 'Means test', icon: IconScale },
   { id: 'money', label: 'Money', icon: IconWallet },
+  { id: 'coach', label: 'Coach', icon: IconChat },
 ]
 
 export default function App() {
-  const [tab, setTab] = useState<TabId>('home')
+  const [tab, setTab] = useState<AppTab>('home')
   const settings = useLiveQuery(() => db.settings.get('main'))
 
   useEffect(() => {
@@ -37,13 +42,14 @@ export default function App() {
         {tab === 'impulse' && <Impulse />}
         {tab === 'means' && <MeansTest />}
         {tab === 'money' && <Money />}
+        {tab === 'coach' && <Coach />}
       </main>
 
       <nav
         className="fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur border-t border-hairline"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="mx-auto max-w-lg grid grid-cols-4">
+        <div className="mx-auto max-w-lg grid grid-cols-5">
           {TABS.map((t) => {
             const active = tab === t.id
             return (
